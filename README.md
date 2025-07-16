@@ -70,39 +70,38 @@ public DepartmentDto getDepartmentByUser(Long departmentId) {
         .block();
 }
 
-🧭 1. service-discovery – Eureka Server
+🔁 service-discovery (Eureka Server)
 server:
   port: 8761
+✅ This service will run on port 8761 (you can access Eureka UI at http://localhost:8761).
 
 spring:
   application:
     name: service-discovery
+✅ Gives your application a name (service-discovery) so other services can refer to it.
 
 eureka:
   client:
-    register-with-eureka: false  # This app is the Eureka server, so it doesn't register itself
+    register-with-eureka: false
     fetch-registry: false
-✅ What it does:
+✅ Since this is the Eureka Server, it doesn’t register itself or fetch other services.
 
-Runs on port 8761
-
-Acts as a central registry where other services will register
-
-Visit: http://localhost:8761
-
-👤 2. user-service – Calls Department Service via WebClient
+👤 user-service (Calls department-service)
 server:
   port: 9091
+✅ Runs on port 9091.
 
 spring:
   application:
     name: user-service
+✅ Registers itself to Eureka with the name user-service.
 
   datasource:
     url: jdbc:mysql://localhost:3306/employee_db
     username: root
     password: password
     driver-class-name: com.mysql.cj.jdbc.Driver
+✅ Connects to MySQL using the given credentials and employee_db database.
 
   jpa:
     hibernate:
@@ -111,6 +110,7 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQL8Dialect
+✅ Enables auto schema update, SQL logging, and sets the MySQL 8 dialect.
 
 eureka:
   client:
@@ -118,6 +118,7 @@ eureka:
     fetch-registry: true
     service-url:
       defaultZone: http://localhost:8761/eureka/
+✅ Registers to Eureka server running at http://localhost:8761/eureka.
 
 management:
   endpoints:
@@ -127,7 +128,10 @@ management:
   endpoint:
     health:
       show-details: always
+✅ Enables actuator endpoints like /actuator/health and /actuator/info.
 
+🛡️ Resilience4j Configuration in user-service
+✅ Circuit Breaker
 resilience4j:
   circuitbreaker:
     instances:
@@ -139,38 +143,45 @@ resilience4j:
         wait-duration-in-open-state: 5s
         failure-rate-threshold: 50
         automatic-transition-from-open-to-half-open-enabled: true
+🧠 What it does:
 
+Tracks the last 10 calls (sliding-window-size)
+
+Breaks circuit if 50% of last 5 calls (minimum-number-of-calls) failed
+
+Stays open for 5s before testing again with 3 calls (half-open)
+
+Prevents overloading when department-service is down
+
+✅ Rate Limiter
   ratelimiter:
     instances:
       userService:
         limit-for-period: 5
         limit-refresh-period: 10s
         timeout-duration: 0
-✅ What it does:
+🧠 What it does:
 
-Runs on 9091
+Allows only 5 API calls every 10 seconds for that method
 
-Registers with Eureka (service-discovery)
+If exceeded, immediately fails (timeout-duration: 0)
 
-Uses MySQL
-
-Uses Circuit Breaker when calling Department Service
-
-RateLimiter allows only 5 calls every 10 seconds
-
-🏢 3. department-service
+🏢 department-service
 server:
   port: 9090
+✅ Runs on 9090.
 
 spring:
   application:
     name: department-service
+✅ Registers as department-service.
 
   datasource:
     url: jdbc:mysql://localhost:3306/department_db
     username: root
     password: password
     driver-class-name: com.mysql.cj.jdbc.Driver
+✅ Connects to the department_db in MySQL.
 
   jpa:
     hibernate:
@@ -179,6 +190,7 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQL8Dialect
+✅ Hibernate JPA settings for MySQL.
 
 eureka:
   client:
@@ -186,31 +198,19 @@ eureka:
     fetch-registry: true
     service-url:
       defaultZone: http://localhost:8761/eureka/
+✅ Registers with Eureka so user-service and api-gateway can discover it.
 
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info
-  endpoint:
-    health:
-      show-details: always
-✅ What it does:
-
-Runs on port 9090
-
-Stores department data in MySQL
-
-Registers with Eureka
-
-🌐 4. api-gateway
+🌐 api-gateway
 server:
   port: 8080
+✅ API Gateway runs on port 8080.
 
 spring:
   application:
     name: api-gateway
+✅ Identifies itself as api-gateway.
 
+✅ Route Configuration
   cloud:
     gateway:
       routes:
@@ -222,41 +222,29 @@ spring:
           uri: lb://department-service
           predicates:
             - Path=/department-service/**
+🧠 What it does:
 
+When someone hits /user-service/**, the gateway routes the request to the user-service
+
+Similarly, /department-service/** goes to department-service
+
+lb:// means it uses Eureka LoadBalancer
+
+✅ Eureka Client
 eureka:
   client:
     register-with-eureka: true
     fetch-registry: true
     service-url:
       defaultZone: http://localhost:8761/eureka/
+✅ Registers with Eureka and fetches other service info.
 
-management:
-  endpoints:
-    web:
-      exposure:
-        include: "*"
-✅ What it does:
+✅ Summary
+Microservice	Port	Responsibilities
+service-discovery	8761	Registers and discovers services (Eureka Server)
+user-service	9091	Handles user CRUD, calls department-service
+department-service	9090	Stores and retrieves department data
+api-gateway	8080	Routes incoming requests to appropriate services
 
-Runs on port 8080
-
-Routes traffic to services:
-
-/user-service/** → user-service
-
-/department-service/** → department-service
-
-Uses load balancer (lb://) and Eureka for dynamic service discovery
-
-✅ How to Test
-🎯 User Service API via Gateway:
-Method	Gateway URL
-POST	http://localhost:8080/user-service/api/users/save
-GET	http://localhost:8080/user-service/api/users/{id}
-GET	http://localhost:8080/user-service/api/users/test-rate
-
-🎯 Department Service API via Gateway:
-Method	Gateway URL
-POST	http://localhost:8080/department-service/api/departments
-GET	http://localhost:8080/department-service/api/departments/{id}
 
 
